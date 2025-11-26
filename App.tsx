@@ -6,10 +6,10 @@ import {
   TileType, 
   PLAYER_COLORS, 
   INITIAL_MONEY, 
-  GameEvent
+  GameEvent,
+  QuizQuestion
 } from './types';
-import { BOARD_DATA, GAME_EVENTS } from './constants';
-import { generateQuizQuestion } from './services/geminiService';
+import { BOARD_DATA, GAME_EVENTS, QUIZ_POOL } from './constants';
 import TileComponent from './components/TileComponent';
 import QuizModal from './components/QuizModal';
 
@@ -19,6 +19,19 @@ const SELECTABLE_COLORS = [
   'bg-cyan-500', 'bg-sky-500', 'bg-blue-500', 'bg-indigo-500', 
   'bg-violet-500', 'bg-purple-500', 'bg-fuchsia-500', 'bg-pink-500', 'bg-rose-500'
 ];
+
+/**
+ * FIREBASE INTEGRATION GUIDE (For Multiplayer)
+ * ---------------------------------------------
+ * 1. Create a Firebase project at console.firebase.google.com
+ * 2. Add 'firebase' package: npm install firebase
+ * 3. Create a firebaseConfig.ts file with your keys.
+ * 4. In App.tsx:
+ *    - Import initializeApp and getDatabase.
+ *    - Use useEffect to subscribe to a room path (e.g., 'games/room1') using 'onValue'.
+ *    - Replace all setGame calls with update() calls to Firebase.
+ *    - This allows all players to see the same state updates in real-time.
+ */
 
 const App: React.FC = () => {
   // --- State Initialization ---
@@ -38,7 +51,8 @@ const App: React.FC = () => {
     currentQuiz: null,
     message: '게임을 시작하려면 플레이어 설정을 완료해주세요.',
     round: 1,
-    maxRounds: 15
+    maxRounds: 15,
+    isSpaceTravelActive: false
   });
   const [isQuizLoading, setIsQuizLoading] = useState(false);
   
@@ -78,13 +92,26 @@ const App: React.FC = () => {
     setGame(prev => ({ ...prev, message: text }));
   };
 
+  const getRandomQuiz = (): QuizQuestion => {
+    const randomIndex = Math.floor(Math.random() * QUIZ_POOL.length);
+    return QUIZ_POOL[randomIndex];
+  };
+
   const endTurnOrRepeat = () => {
+    if (game.isSpaceTravelActive) {
+      addLog("이동할 지역을 선택해주세요!");
+      return;
+    }
+
     if (game.isDouble) {
         addLog(`${game.players[game.currentPlayerIndex].name}님이 더블을 기록했습니다! 한 번 더 던지세요.`);
         setGame(prev => ({
             ...prev,
             turnPhase: 'ROLL',
-            isDouble: false, // Reset flag so they don't get infinite double turns unless they roll double again
+            // Double flag stays true to indicate bonus turn, but logic handles reset on next roll
+            // Actually, we just keep isDouble true or reset? 
+            // We need to allow them to roll again.
+            // isDouble is used to show the "Roll Again" button text.
             message: `더블! ${prev.players[prev.currentPlayerIndex].name}의 차례가 계속됩니다.`
         }));
     } else {
@@ -268,14 +295,14 @@ const App: React.FC = () => {
 
   // Effect to handle tile landing events automatically
   useEffect(() => {
-    if (game.turnPhase === 'ACTION') {
+    if (game.turnPhase === 'ACTION' && !game.isSpaceTravelActive) {
       const player = game.players[game.currentPlayerIndex];
       const tile = game.tiles[player.position];
       
       handleTileEvent(tile, player);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game.turnPhase, game.currentPlayerIndex]); 
+  }, [game.turnPhase, game.currentPlayerIndex, game.isSpaceTravelActive]); 
 
   const handleTileEvent = async (tile: Tile, player: Player) => {
     // 1. Start Tile
@@ -315,7 +342,9 @@ const App: React.FC = () => {
     if (tile.type === TileType.QUIZ) {
         addLog('퀴즈 타임! 문제를 풀면 보너스를 받습니다.');
         setIsQuizLoading(true);
-        const question = await generateQuizQuestion();
+        // Simulate loading for effect
+        await new Promise(resolve => setTimeout(resolve, 600));
+        const question = getRandomQuiz();
         setIsQuizLoading(false);
         setGame(prev => ({
             ...prev,
@@ -335,6 +364,15 @@ const App: React.FC = () => {
         
         await new Promise(r => setTimeout(r, 1000));
         
+        if (randomEvent.type === 'TRAVEL') {
+           setGame(prev => ({
+             ...prev,
+             isSpaceTravelActive: true,
+             message: "🚀 이동하고 싶은 지역을 선택하세요!"
+           }));
+           return;
+        }
+
         setGame(prev => {
             const newPlayers = [...prev.players];
             const p = newPlayers[prev.currentPlayerIndex];
@@ -385,6 +423,32 @@ const App: React.FC = () => {
             });
         }
     }
+  };
+
+  const handleTileClick = (tile: Tile) => {
+    // Space Travel Logic
+    if (game.isSpaceTravelActive) {
+      setGame(prev => {
+        const newPlayers = [...prev.players];
+        const currentPlayer = newPlayers[prev.currentPlayerIndex];
+        
+        // Update position
+        currentPlayer.position = tile.id;
+
+        return {
+          ...prev,
+          players: newPlayers,
+          isSpaceTravelActive: false, // End travel mode
+          turnPhase: 'ACTION', // Proceed to action on the new tile
+          message: `${tile.name}(으)로 순간이동 했습니다!`
+        };
+      });
+      // The useEffect for ACTION phase will trigger handleTileEvent automatically
+      return;
+    }
+    
+    // Normal info click
+    console.log("Tile clicked:", tile);
   };
 
   const calculateRent = (tile: Tile) => {
@@ -563,7 +627,7 @@ const App: React.FC = () => {
       return (
           <div className="min-h-screen bg-gradient-to-br from-purple-600 to-blue-500 flex flex-col items-center justify-center p-4">
               <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-lg w-full text-center animate-bounce-in">
-                  <h1 className="text-4xl font-jua text-purple-600 mb-6">🏆 게임 종료! 🏆</h1>
+                  <h1 className="text-3xl md:text-4xl font-jua text-purple-600 mb-6">🏆 게임 종료! 🏆</h1>
                   <div className="space-y-4 mb-8">
                       {results.map((p, idx) => (
                           <div key={p.id} className={`flex items-center justify-between p-4 rounded-xl ${idx === 0 ? 'bg-yellow-100 border-2 border-yellow-400 transform scale-105 shadow-md' : 'bg-gray-50 border border-gray-200'}`}>
@@ -601,7 +665,7 @@ const App: React.FC = () => {
   const canPass = game.turnPhase === 'ACTION' || game.turnPhase === 'END';
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col lg:flex-row overflow-hidden">
+    <div className="min-h-screen bg-gray-100 flex flex-col lg:flex-row overflow-hidden max-h-screen">
       {/* Quiz Modal */}
       {game.quizActive && game.currentQuiz && (
         <QuizModal 
@@ -621,7 +685,7 @@ const App: React.FC = () => {
       {/* Main Game Board Area */}
       <div className="flex-1 p-2 md:p-4 flex items-center justify-center overflow-auto">
          {/* 6x6 Grid Container */}
-         <div className="grid grid-cols-6 grid-rows-6 gap-1 w-full max-w-[800px] aspect-square bg-blue-200 p-2 md:p-4 rounded-xl shadow-inner relative">
+         <div className={`grid grid-cols-6 grid-rows-6 gap-0.5 md:gap-1 w-full max-w-[800px] aspect-square bg-blue-200 p-1 md:p-4 rounded-xl shadow-inner relative transition-all ${game.isSpaceTravelActive ? 'cursor-pointer ring-4 ring-yellow-400 animate-pulse' : ''}`}>
             
             {/* Render Tiles */}
             {game.tiles.map((tile, index) => {
@@ -632,41 +696,41 @@ const App: React.FC = () => {
                             tile={tile} 
                             playersOnTile={game.players.filter(p => p.position === tile.id)}
                             ownerColor={owner?.color}
-                            onClick={(t) => console.log(t)} // Info click
+                            onClick={handleTileClick}
                         />
                     </div>
                 );
             })}
 
             {/* Center Area (Control Panel) */}
-            <div className="col-start-2 col-end-6 row-start-2 row-end-6 bg-white/90 backdrop-blur-sm rounded-xl p-4 md:p-6 flex flex-col items-center justify-center shadow-lg border-2 border-white z-10">
+            <div className="col-start-2 col-end-6 row-start-2 row-end-6 bg-white/90 backdrop-blur-sm rounded-xl p-2 md:p-6 flex flex-col items-center justify-center shadow-lg border-2 border-white z-10">
                 
                 {/* Header Info */}
-                <div className="text-center mb-4 w-full">
-                    <h2 className="text-xl md:text-3xl font-jua text-gray-800 mb-1">Round {game.round} / {game.maxRounds}</h2>
-                    <div className="h-1 w-20 bg-blue-400 mx-auto rounded-full"></div>
+                <div className="text-center mb-2 md:mb-4 w-full">
+                    <h2 className="text-lg md:text-3xl font-jua text-gray-800 mb-1">Round {game.round} / {game.maxRounds}</h2>
+                    <div className="h-1 w-12 md:w-20 bg-blue-400 mx-auto rounded-full"></div>
                 </div>
 
                 {/* Message Log */}
-                <div className="w-full bg-gray-100 rounded-lg p-3 h-24 overflow-y-auto mb-4 text-center flex items-center justify-center border border-gray-200 shadow-inner">
-                    <p className="font-medium text-gray-700 animate-fade-in whitespace-pre-line">{game.message}</p>
+                <div className="w-full bg-gray-100 rounded-lg p-2 md:p-3 h-16 md:h-24 overflow-y-auto mb-2 md:mb-4 text-center flex items-center justify-center border border-gray-200 shadow-inner">
+                    <p className="font-medium text-xs md:text-base text-gray-700 animate-fade-in whitespace-pre-line leading-tight">{game.message}</p>
                 </div>
 
                 {/* Current Player Status */}
-                <div className="flex flex-col items-center mb-6">
-                    <div className="text-sm text-gray-500 mb-1">현재 차례</div>
-                    <div className={`px-6 py-2 rounded-full text-white font-bold text-lg md:text-2xl shadow-md flex items-center gap-2 ${currentPlayer.color.replace('bg-', 'bg-')}`}>
-                        <div className="w-4 h-4 rounded-full bg-white"></div>
+                <div className="flex flex-col items-center mb-3 md:mb-6">
+                    <div className="text-xs md:text-sm text-gray-500 mb-1">현재 차례</div>
+                    <div className={`px-4 py-1 md:px-6 md:py-2 rounded-full text-white font-bold text-base md:text-2xl shadow-md flex items-center gap-2 ${currentPlayer.color.replace('bg-', 'bg-')}`}>
+                        <div className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-white"></div>
                         {currentPlayer.name}
                     </div>
                 </div>
 
                 {/* Controls */}
-                <div className="flex gap-4">
+                <div className="flex gap-2 md:gap-4">
                     {game.turnPhase === 'ROLL' && (
                         <button 
                             onClick={rollDice}
-                            className="bg-gradient-to-br from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold py-3 px-8 rounded-full text-xl shadow-lg transform hover:scale-105 transition-all"
+                            className="bg-gradient-to-br from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold py-2 px-6 md:py-3 md:px-8 rounded-full text-lg md:text-xl shadow-lg transform hover:scale-105 transition-all active:scale-95"
                         >
                             🎲 주사위 굴리기
                         </button>
@@ -674,9 +738,9 @@ const App: React.FC = () => {
                     
                     {/* Dice Display */}
                     {game.turnPhase !== 'ROLL' && (
-                       <div className="flex gap-3 items-center">
+                       <div className="flex gap-2 md:gap-3 items-center">
                           {game.diceValues.map((val, idx) => (
-                            <div key={idx} className={`w-14 h-14 md:w-16 md:h-16 bg-white border-4 ${game.isDouble ? 'border-red-500 text-red-500' : 'border-gray-800'} rounded-xl flex items-center justify-center text-4xl font-bold shadow-md mb-2 transition-transform duration-75`}>
+                            <div key={idx} className={`w-10 h-10 md:w-16 md:h-16 bg-white border-4 ${game.isDouble ? 'border-red-500 text-red-500' : 'border-gray-800'} rounded-xl flex items-center justify-center text-2xl md:text-4xl font-bold shadow-md mb-2 transition-transform duration-75`}>
                                 {val}
                             </div>
                           ))}
@@ -685,20 +749,20 @@ const App: React.FC = () => {
                 </div>
 
                 {/* Action Buttons */}
-                <div className="flex gap-2 mt-4">
+                <div className="flex flex-wrap justify-center gap-1 md:gap-2 mt-2 md:mt-4 w-full px-2">
                     {canBuy && (
-                        <button onClick={handleBuyCity} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow animate-pulse">
-                            구매하기 ({currentTile.price}구름)
+                        <button onClick={handleBuyCity} className="bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-3 md:py-2 md:px-4 rounded-lg shadow animate-pulse text-xs md:text-base">
+                            구매 ({currentTile.price})
                         </button>
                     )}
                     {canUpgrade && (
-                        <button onClick={handleUpgradeCity} className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow animate-pulse">
-                            건물 증축 ({Math.floor(currentTile.price * 0.5)}구름)
+                        <button onClick={handleUpgradeCity} className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 md:py-2 md:px-4 rounded-lg shadow animate-pulse text-xs md:text-base">
+                            증축 ({Math.floor(currentTile.price * 0.5)})
                         </button>
                     )}
-                    {canPass && game.turnPhase !== 'ROLL' && game.turnPhase !== 'MOVING' && game.turnPhase !== 'ROLLING' && (
-                        <button onClick={endTurnOrRepeat} className={`bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg shadow ${game.isDouble ? 'bg-red-500 hover:bg-red-600' : ''}`}>
-                            {game.isDouble ? '🎲 한 번 더 굴리기!' : '턴 종료'}
+                    {canPass && game.turnPhase !== 'ROLL' && game.turnPhase !== 'MOVING' && game.turnPhase !== 'ROLLING' && !game.isSpaceTravelActive && (
+                        <button onClick={endTurnOrRepeat} className={`bg-gray-500 hover:bg-gray-600 text-white font-bold py-1 px-3 md:py-2 md:px-4 rounded-lg shadow text-xs md:text-base ${game.isDouble ? 'bg-red-500 hover:bg-red-600' : ''}`}>
+                            {game.isDouble ? '🎲 한 번 더!' : '턴 종료'}
                         </button>
                     )}
                 </div>
@@ -707,37 +771,26 @@ const App: React.FC = () => {
          </div>
       </div>
 
-      {/* Sidebar: Player Stats */}
-      <div className="w-full lg:w-80 bg-white border-l border-gray-200 p-4 shadow-xl overflow-y-auto z-20">
-          <h3 className="font-jua text-xl text-gray-700 mb-4 border-b pb-2">플레이어 현황</h3>
-          <div className="space-y-4">
+      {/* Sidebar: Player Stats (Compact on mobile) */}
+      <div className="w-full lg:w-80 bg-white border-t lg:border-t-0 lg:border-l border-gray-200 p-2 md:p-4 shadow-xl overflow-y-auto max-h-[30vh] lg:max-h-full z-20">
+          <h3 className="font-jua text-lg md:text-xl text-gray-700 mb-2 md:mb-4 border-b pb-2 sticky top-0 bg-white z-10">플레이어 현황</h3>
+          <div className="space-y-2 md:space-y-4">
               {game.players.map((player) => (
-                  <div key={player.id} className={`p-4 rounded-xl border-2 transition-all ${game.currentPlayerIndex === player.id ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' : 'border-gray-100 bg-gray-50'}`}>
-                      <div className="flex justify-between items-center mb-2">
+                  <div key={player.id} className={`p-2 md:p-4 rounded-xl border-2 transition-all ${game.currentPlayerIndex === player.id ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' : 'border-gray-100 bg-gray-50'}`}>
+                      <div className="flex justify-between items-center mb-1">
                           <div className="flex items-center gap-2">
-                              <div className={`w-4 h-4 rounded-full ${player.color}`}></div>
-                              <span className={`font-bold ${game.currentPlayerIndex === player.id ? 'text-blue-800' : 'text-gray-700'}`}>
+                              <div className={`w-3 h-3 md:w-4 md:h-4 rounded-full ${player.color}`}></div>
+                              <span className={`font-bold text-sm md:text-base ${game.currentPlayerIndex === player.id ? 'text-blue-800' : 'text-gray-700'}`}>
                                   {player.name} {player.isSkipped && '🚫'}
                               </span>
                           </div>
-                          <span className="font-mono font-bold text-gray-900">{player.money.toLocaleString()} 구름</span>
+                          <span className="font-mono font-bold text-gray-900 text-sm md:text-base">{player.money.toLocaleString()} 구름</span>
                       </div>
-                      <div className="text-xs text-gray-500">
-                          보유 도시: {player.assets.length > 0 ? player.assets.map(id => BOARD_DATA[id].name).join(', ') : '없음'}
+                      <div className="text-[10px] md:text-xs text-gray-500 truncate">
+                          보유: {player.assets.length > 0 ? player.assets.map(id => BOARD_DATA[id].name).join(', ') : '없음'}
                       </div>
                   </div>
               ))}
-          </div>
-
-          <div className="mt-8 p-4 bg-yellow-50 rounded-lg border border-yellow-200 text-sm text-yellow-800">
-             <h4 className="font-bold mb-1">💡 게임 팁</h4>
-             <ul className="list-disc list-inside space-y-1">
-                 <li>같은 색깔 칸에 도착하면 도시를 살 수 있어요.</li>
-                 <li>퀴즈를 맞추면 보너스 돈을 받아요!</li>
-                 <li>친구 도시에 도착하면 통행료를 내야 해요.</li>
-                 <li>주사위가 더블(같은 숫자)이면 한 번 더!</li>
-                 <li>15라운드가 끝나면 재산이 가장 많은 사람이 승리!</li>
-             </ul>
           </div>
       </div>
     </div>

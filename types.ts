@@ -43,6 +43,7 @@ export interface GameState {
   message: string;
   round: number;
   maxRounds?: number;
+  isSpaceTravelActive: boolean;
 }
 
 export interface QuizQuestion {
@@ -56,7 +57,7 @@ export interface GameEvent {
   id: string;
   title: string;
   description: string;
-  type: 'MONEY' | 'MOVE' | 'SKIP';
+  type: 'MONEY' | 'MOVE' | 'SKIP' | 'TRAVEL';
   value: number; // Amount of money or steps
 }
 
