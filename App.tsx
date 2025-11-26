@@ -808,7 +808,7 @@ const App: React.FC = () => {
                           <span className="font-mono font-black text-black text-sm md:text-lg">{player.money.toLocaleString()} 구름</span>
                       </div>
                       {/* Changed truncate to break-words to show full list */}
-                      <div className="text-[11px] md:text-sm text-gray-800 font-medium break-words pl-6">
+                      <div className="text-[11px] md:text-sm text-gray-800 font-medium break-words pl-6 leading-relaxed">
                           보유: {player.assets.length > 0 ? player.assets.map(id => BOARD_DATA[id].name).join(', ') : '없음'}
                       </div>
                   </div>
