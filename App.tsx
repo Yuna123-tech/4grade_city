@@ -723,7 +723,7 @@ const App: React.FC = () => {
 
                 {/* Message Log */}
                 <div className="w-full bg-blue-50/80 rounded-lg p-2 md:p-4 h-20 md:h-28 overflow-y-auto mb-2 md:mb-4 text-center flex items-center justify-center border-2 border-blue-100 shadow-inner">
-                    <p className="font-bold text-sm md:text-xl text-black animate-fade-in whitespace-pre-line leading-normal">{game.message}</p>
+                    <p className="font-bold text-base md:text-xl text-black animate-fade-in whitespace-pre-line leading-normal">{game.message}</p>
                 </div>
 
                 {/* Current Player Status */}
@@ -807,7 +807,8 @@ const App: React.FC = () => {
                           </div>
                           <span className="font-mono font-black text-black text-sm md:text-lg">{player.money.toLocaleString()} 구름</span>
                       </div>
-                      <div className="text-[11px] md:text-sm text-gray-800 font-medium truncate pl-6">
+                      {/* Changed truncate to break-words to show full list */}
+                      <div className="text-[11px] md:text-sm text-gray-800 font-medium break-words pl-6">
                           보유: {player.assets.length > 0 ? player.assets.map(id => BOARD_DATA[id].name).join(', ') : '없음'}
                       </div>
                   </div>
