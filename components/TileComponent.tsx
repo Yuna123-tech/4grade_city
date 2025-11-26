@@ -17,6 +17,7 @@ const TileComponent: React.FC<TileComponentProps> = ({ tile, playersOnTile, owne
   if (tile.type === TileType.CITY) {
       if (tile.ownerId !== null) {
           const colorBase = ownerColor || PLAYER_COLORS[tile.ownerId % PLAYER_COLORS.length]; 
+          // Extract color name safely
           const colorName = colorBase.replace('bg-', '').replace('-500', '');
           const bgClass = `bg-${colorName}-100`;
           const borderClass = `border-${colorName}-600`;
@@ -40,7 +41,7 @@ const TileComponent: React.FC<TileComponentProps> = ({ tile, playersOnTile, owne
     if (tile.type !== TileType.CITY || tile.ownerId === null) return null;
     const badgeColor = ownerColor || PLAYER_COLORS[tile.ownerId % PLAYER_COLORS.length];
     return (
-      <div className={`absolute top-0 left-0 px-0.5 rounded-br text-[5px] md:text-xs font-black text-white shadow-sm z-10 ${badgeColor} border-r border-b border-white/20 leading-none py-0.5`}>
+      <div className={`absolute top-0 left-0 px-0.5 rounded-br text-[5px] md:text-xs font-black text-white shadow-sm z-20 ${badgeColor} border-r border-b border-white/20 leading-none py-0.5 pointer-events-none`}>
         P{tile.ownerId + 1}
       </div>
     );
@@ -59,7 +60,7 @@ const TileComponent: React.FC<TileComponentProps> = ({ tile, playersOnTile, owne
     if (!indicator) return null;
 
     return (
-       <div className="absolute top-0 right-0 p-0.5 z-10 leading-none">
+       <div className="absolute top-0 right-0 p-0.5 z-20 leading-none pointer-events-none">
           {indicator}
        </div>
     );
@@ -76,7 +77,7 @@ const TileComponent: React.FC<TileComponentProps> = ({ tile, playersOnTile, owne
       if (stars.length === 0) {
         return <span className="text-[6px] md:text-xs font-extrabold text-slate-700 bg-white/50 px-0.5 rounded whitespace-nowrap">토지</span>;
       }
-      return <div className="flex gap-px text-[6px] md:text-xs">{stars}</div>;
+      return <div className="flex gap-px text-[6px] md:text-xs justify-center">{stars}</div>;
   };
 
   return (
@@ -87,34 +88,44 @@ const TileComponent: React.FC<TileComponentProps> = ({ tile, playersOnTile, owne
       {renderOwnerBadge()}
       {renderBuildingIndicator()}
 
-      {/* Header: Name - Ultra compact for mobile */}
-      <div className={`w-full text-center text-[7px] md:text-base font-black px-px tracking-tight text-black drop-shadow-none break-words whitespace-normal leading-[8px] md:leading-tight z-0 ${tile.ownerId !== null ? 'mt-3 md:mt-5' : 'mt-0.5'}`}>
-        {tile.name}
+      {/* 
+         LAYOUT STRATEGY: 
+         - Name: flex-shrink-0 (Never shrink)
+         - Icon: flex-1 (Shrink if needed)
+         - Price/Players: flex-shrink-0 (Never shrink)
+      */}
+
+      {/* Header: Name */}
+      <div className="flex-shrink-0 w-full text-center pt-1 md:pt-1 z-10 px-px">
+         <div className="text-[7px] md:text-base font-black tracking-tight text-black drop-shadow-none break-words whitespace-normal leading-[9px] md:leading-tight">
+            {tile.name}
+         </div>
       </div>
 
-      {/* Center: Icon & Status */}
-      <div className="flex flex-col items-center justify-center flex-1 w-full overflow-hidden my-0.5 min-h-0">
-        <span className="text-base sm:text-xl md:text-5xl drop-shadow-md transform hover:scale-110 transition-transform duration-200 leading-none py-0.5">
+      {/* Center: Icon (Shrinkable) */}
+      <div className="flex-1 w-full flex flex-col items-center justify-center min-h-0 overflow-hidden relative z-0">
+        <span className="text-sm sm:text-xl md:text-5xl drop-shadow-md leading-none py-0.5">
             {iconDisplay}
         </span>
-        
-        <div className="flex flex-col items-center justify-center w-full px-px">
-             {tile.type === TileType.CITY ? (
-                 tile.ownerId !== null ? renderBuildingStars() : <span className="text-black font-extrabold text-[7px] md:text-sm bg-white/60 px-0.5 rounded-full shadow-sm tracking-tighter leading-none">{tile.price}</span>
-             ) : (
-                 <span className="hidden sm:block text-[6px] sm:text-[9px] md:text-xs text-gray-900 font-bold text-center leading-tight break-words px-px bg-white/40 rounded w-full">
-                     {tile.description}
-                 </span>
-             )}
-        </div>
+      </div>
+      
+      {/* Footer Info: Price or Desc */}
+      <div className="flex-shrink-0 w-full flex flex-col items-center justify-center px-px pb-0.5 z-10">
+           {tile.type === TileType.CITY ? (
+               tile.ownerId !== null ? renderBuildingStars() : <span className="text-black font-extrabold text-[7px] md:text-sm bg-white/60 px-0.5 rounded-full shadow-sm tracking-tighter leading-none">{tile.price}</span>
+           ) : (
+               <span className="block text-[6px] sm:text-[8px] md:text-xs text-gray-900 font-bold text-center leading-tight break-words px-px bg-white/40 rounded w-full line-clamp-2 md:line-clamp-none">
+                   {tile.description}
+               </span>
+           )}
       </div>
 
       {/* Footer: Players present */}
-      <div className="flex flex-wrap justify-center gap-[1px] md:gap-1.5 w-full min-h-[6px] md:min-h-[30px] items-end pb-0.5 px-px">
+      <div className="flex-shrink-0 flex flex-wrap justify-center gap-[1px] md:gap-1.5 w-full min-h-[4px] md:min-h-[24px] items-end pb-0.5 px-px z-10">
         {playersOnTile.map(p => (
           <div 
             key={p.id} 
-            className={`w-1.5 h-1.5 sm:w-3 sm:h-3 md:w-6 md:h-6 rounded-full border border-white shadow-lg ${p.color} transform transition-all duration-300 z-20 ring-[0.5px] ring-black/20`} 
+            className={`w-1.5 h-1.5 sm:w-2.5 sm:h-2.5 md:w-5 md:h-5 rounded-full border border-white shadow-lg ${p.color} ring-[0.5px] ring-black/20`} 
             title={p.name}
           />
         ))}

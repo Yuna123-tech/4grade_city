@@ -109,11 +109,6 @@ const App: React.FC = () => {
         setGame(prev => ({
             ...prev,
             turnPhase: 'ROLL',
-            // Keep isDouble true or handle it? Logic in nextTurn resets it.
-            // Here we just go back to ROLL. Logic in rollDice sets new isDouble.
-            // We need to keep 'isDouble' state? No, rollDice calculates new isDouble.
-            // BUT we want to preserve the "Player stays same".
-            // nextTurn() changes player. We don't call nextTurn().
             message: `더블! ${prev.players[prev.currentPlayerIndex].name}의 차례가 계속됩니다.`
         }));
     } else {
@@ -820,7 +815,7 @@ const App: React.FC = () => {
               </div>
               
               {/* Asset List - Optimized for mobile wrapping */}
-              <div className="text-[10px] md:text-sm text-gray-600 bg-white p-1.5 md:p-2 rounded border border-gray-200 min-h-[1.5rem] break-words leading-tight">
+              <div className="text-[10px] md:text-sm text-gray-600 bg-white p-1.5 md:p-2 rounded border border-gray-200 min-h-[1.5rem] break-all whitespace-normal leading-tight">
                 {p.assets.length > 0 ? (
                     p.assets.map((assetId, i) => (
                         <span key={assetId}>
