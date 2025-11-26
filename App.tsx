@@ -8,7 +8,8 @@ import {
   PLAYER_COLORS, 
   INITIAL_MONEY, 
   GameEvent,
-  QuizQuestion
+  QuizQuestion,
+  QuizDifficulty
 } from './types';
 import { BOARD_DATA, GAME_EVENTS, QUIZ_POOL } from './constants';
 import TileComponent from './components/TileComponent';
@@ -54,7 +55,8 @@ const App: React.FC = () => {
     message: '게임을 시작하려면 플레이어 설정을 완료해주세요.',
     round: 1,
     maxRounds: 15,
-    isSpaceTravelActive: false
+    isSpaceTravelActive: false,
+    pendingCityPurchase: null
   });
   const [isQuizLoading, setIsQuizLoading] = useState(false);
   
@@ -94,9 +96,15 @@ const App: React.FC = () => {
     setGame(prev => ({ ...prev, message: text }));
   };
 
-  const getRandomQuiz = (): QuizQuestion => {
-    const randomIndex = Math.floor(Math.random() * QUIZ_POOL.length);
-    return QUIZ_POOL[randomIndex];
+  const getRandomQuiz = (difficulty?: QuizDifficulty): QuizQuestion => {
+    let pool = QUIZ_POOL;
+    if (difficulty) {
+       pool = QUIZ_POOL.filter(q => q.difficulty === difficulty);
+       // Fallback if no question of that difficulty found
+       if (pool.length === 0) pool = QUIZ_POOL;
+    }
+    const randomIndex = Math.floor(Math.random() * pool.length);
+    return pool[randomIndex];
   };
 
   const endTurnOrRepeat = () => {
@@ -166,6 +174,7 @@ const App: React.FC = () => {
         turnPhase: 'ROLL',
         round: newRound,
         isDouble: false,
+        pendingCityPurchase: null,
         message: `${prev.players[nextIndex].name}의 차례입니다! 주사위를 굴려주세요.`
       };
     });
@@ -337,7 +346,7 @@ const App: React.FC = () => {
         return;
     }
 
-    // 4. Quiz
+    // 4. Quiz (Dedicated Quiz Tile)
     if (tile.type === TileType.QUIZ) {
         addLog('퀴즈 타임! 문제를 풀면 보너스를 받습니다.');
         setIsQuizLoading(true);
@@ -348,7 +357,8 @@ const App: React.FC = () => {
         setGame(prev => ({
             ...prev,
             quizActive: true,
-            currentQuiz: question
+            currentQuiz: question,
+            pendingCityPurchase: null // No purchase, just bonus
         }));
         return;
     }
@@ -367,7 +377,7 @@ const App: React.FC = () => {
            setGame(prev => ({
              ...prev,
              isSpaceTravelActive: true,
-             message: "🚀 이동하고 싶은 지역을 선택하세요!"
+             message: "✈️ 공항에서 이동할 지역을 선택하세요!"
            }));
            return;
         }
@@ -400,11 +410,23 @@ const App: React.FC = () => {
         return;
     }
 
-    // 6. City Logic
+    // 6. Airport
+    if (tile.type === TileType.AIRPORT) {
+        addLog('🛫 인천 공항에 도착했습니다! 원하는 곳으로 이동하세요.');
+        setGame(prev => ({
+            ...prev,
+            isSpaceTravelActive: true,
+            message: "✈️ 지도를 클릭하여 이동할 지역을 선택하세요!"
+        }));
+        return;
+    }
+
+    // 7. City Logic
     if (tile.type === TileType.CITY) {
         if (tile.ownerId === null) {
             addLog(`${tile.name}에 도착했습니다. (가격: ${tile.price}구름)`);
-            // Remains in ACTION phase for Buy/Pass
+            // Change phase to CITY_DECISION to show purchase options based on quiz difficulty
+            setGame(prev => ({ ...prev, turnPhase: 'CITY_DECISION', message: '건물을 짓기 위해 퀴즈에 도전하세요!' }));
         } else if (tile.ownerId === player.id) {
              addLog(`자신의 도시 ${tile.name}에 왔습니다. 건물을 업그레이드할 수 있습니다.`);
              // Remains in ACTION phase for Upgrade/Pass
@@ -426,7 +448,7 @@ const App: React.FC = () => {
   };
 
   const handleTileClick = (tile: Tile) => {
-    // Space Travel Logic
+    // Space Travel Logic (used by both Airport and Event)
     if (game.isSpaceTravelActive) {
       setGame(prev => {
         const newPlayers = [...prev.players];
@@ -440,7 +462,7 @@ const App: React.FC = () => {
           players: newPlayers,
           isSpaceTravelActive: false, // End travel mode
           turnPhase: 'ACTION', // Proceed to action on the new tile
-          message: `${tile.name}(으)로 순간이동 했습니다!`
+          message: `✈️ ${tile.name}(으)로 이동했습니다!`
         };
       });
       // The useEffect for ACTION phase will trigger handleTileEvent automatically
@@ -455,31 +477,38 @@ const App: React.FC = () => {
     return tile.rent + (tile.rent * tile.buildingLevel);
   };
 
-  const handleBuyCity = () => {
+  // Called when user selects a difficulty to attempt to buy a city
+  const handleCityQuizSelect = (difficulty: QuizDifficulty) => {
       const player = game.players[game.currentPlayerIndex];
       const tile = game.tiles[player.position];
+      
+      let level = 0;
+      let cost = tile.price;
 
-      if (player.money >= tile.price) {
-          setGame(prev => {
-              const newPlayers = [...prev.players];
-              newPlayers[player.id].money -= tile.price;
-              newPlayers[player.id].assets.push(tile.id);
-              
-              const newTiles = [...prev.tiles];
-              newTiles[tile.id] = { ...tile, ownerId: player.id, buildingLevel: 0 };
-              
-              return { 
-                  ...prev, 
-                  players: newPlayers, 
-                  tiles: newTiles, 
-                  turnPhase: 'END',
-                  message: `${tile.name}을(를) 구매했습니다!` 
-              };
-          });
-      } else {
-          addLog('돈이 부족하여 구매할 수 없습니다.');
-          setGame(prev => ({...prev, turnPhase: 'END'}));
+      if (difficulty === 'MEDIUM') {
+          level = 1;
+          cost = tile.price + Math.floor(tile.price * 0.5);
+      } else if (difficulty === 'HARD') {
+          level = 2;
+          cost = tile.price + Math.floor(tile.price * 0.5) * 2; // Price + 2 upgrades roughly
       }
+
+      if (player.money < cost) {
+          addLog("돈이 부족하여 선택할 수 없습니다.");
+          return;
+      }
+
+      setIsQuizLoading(true);
+      setTimeout(() => {
+          const question = getRandomQuiz(difficulty);
+          setIsQuizLoading(false);
+          setGame(prev => ({
+              ...prev,
+              quizActive: true,
+              currentQuiz: question,
+              pendingCityPurchase: { level, cost }
+          }));
+      }, 500);
   };
 
   const handleUpgradeCity = () => {
@@ -518,13 +547,14 @@ const App: React.FC = () => {
   const handlePass = () => {
     const player = game.players[game.currentPlayerIndex];
     const tile = game.tiles[player.position];
-    const canBuy = game.turnPhase === 'ACTION' && tile.type === TileType.CITY && tile.ownerId === null && player.money >= tile.price;
     const canUpgrade = game.turnPhase === 'ACTION' && tile.type === TileType.CITY && tile.ownerId === player.id && tile.buildingLevel < 2 && player.money >= Math.floor(tile.price * 0.5);
     
-    if (canBuy) {
-        addLog('구매하지 않고 지나갑니다.');
-    } else if (canUpgrade) {
+    if (canUpgrade) {
         addLog('증축하지 않습니다.');
+    } else if (game.turnPhase === 'CITY_DECISION') {
+        addLog('구매를 포기합니다.');
+    } else {
+        addLog('지나갑니다.');
     }
     setGame(prev => ({ ...prev, turnPhase: 'END' }));
   };
@@ -538,14 +568,54 @@ const App: React.FC = () => {
   };
 
   const handleQuizResult = (isCorrect: boolean) => {
-      setGame(prev => ({ ...prev, quizActive: false, currentQuiz: null }));
-      if (isCorrect) {
-          addLog('정답입니다! 상금 300구름을 획득했습니다.');
-          updateMoney(game.currentPlayerIndex, 300);
-      } else {
-          addLog('틀렸습니다. 아쉽네요.');
-      }
-      setGame(prev => ({ ...prev, turnPhase: 'END' }));
+      setGame(prev => {
+          const newState = { ...prev, quizActive: false, currentQuiz: null };
+          
+          if (isCorrect) {
+              // 1. City Purchase Quiz
+              if (prev.pendingCityPurchase) {
+                  const player = prev.players[prev.currentPlayerIndex];
+                  const tile = prev.tiles[player.position];
+                  const { cost, level } = prev.pendingCityPurchase;
+                  
+                  const newPlayers = [...prev.players];
+                  newPlayers[player.id].money -= cost;
+                  newPlayers[player.id].assets.push(tile.id);
+
+                  const newTiles = [...prev.tiles];
+                  newTiles[tile.id] = { ...tile, ownerId: player.id, buildingLevel: level };
+
+                  return {
+                      ...newState,
+                      players: newPlayers,
+                      tiles: newTiles,
+                      turnPhase: 'END',
+                      pendingCityPurchase: null,
+                      message: `정답입니다! ${tile.name}을(를) 구매하고 건물을 지었습니다.`
+                  };
+              } 
+              // 2. Normal Bonus Quiz
+              else {
+                  // Cannot call updateMoney here easily due to closure/reducer pattern, handle manually
+                  const newPlayers = [...prev.players];
+                  newPlayers[prev.currentPlayerIndex].money += 300;
+                  return {
+                      ...newState,
+                      players: newPlayers,
+                      turnPhase: 'END',
+                      message: '정답입니다! 상금 300구름을 획득했습니다.'
+                  };
+              }
+          } else {
+              // Incorrect
+              return {
+                  ...newState,
+                  turnPhase: 'END',
+                  pendingCityPurchase: null,
+                  message: '틀렸습니다. 건물을 지을 수 없습니다.'
+              };
+          }
+      });
   };
 
   const calculateFinalScores = () => {
@@ -689,7 +759,6 @@ const App: React.FC = () => {
 
   const currentPlayer = game.players[game.currentPlayerIndex];
   const currentTile = game.tiles[currentPlayer.position];
-  const canBuy = game.turnPhase === 'ACTION' && currentTile.type === TileType.CITY && currentTile.ownerId === null && currentPlayer.money >= currentTile.price;
   const canUpgrade = game.turnPhase === 'ACTION' && currentTile.type === TileType.CITY && currentTile.ownerId === currentPlayer.id && currentTile.buildingLevel < 2 && currentPlayer.money >= Math.floor(currentTile.price * 0.5);
 
   return (
@@ -753,14 +822,16 @@ const App: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Dice Display */}
-                <div className="flex gap-2 md:gap-4 mb-2 md:mb-6">
-                    {game.diceValues.map((val, i) => (
-                        <div key={i} className="w-10 h-10 md:w-16 md:h-16 bg-white rounded-lg shadow-md border-2 border-gray-200 flex items-center justify-center text-xl md:text-4xl font-bold text-blue-600">
-                            {val}
-                        </div>
-                    ))}
-                </div>
+                {/* Dice Display - Show unless buying city */}
+                {game.turnPhase !== 'CITY_DECISION' && (
+                  <div className="flex gap-2 md:gap-4 mb-2 md:mb-6">
+                      {game.diceValues.map((val, i) => (
+                          <div key={i} className="w-10 h-10 md:w-16 md:h-16 bg-white rounded-lg shadow-md border-2 border-gray-200 flex items-center justify-center text-xl md:text-4xl font-bold text-blue-600">
+                              {val}
+                          </div>
+                      ))}
+                  </div>
+                )}
 
                 {/* Controls */}
                 <div className="flex flex-col gap-1 md:gap-3 w-full items-center z-20 relative px-4">
@@ -779,17 +850,40 @@ const App: React.FC = () => {
                         <button disabled className="w-full max-w-xs bg-gray-400 text-white font-bold py-2 md:py-4 rounded-xl cursor-not-allowed text-sm md:text-xl">
                             {game.turnPhase === 'ROLLING' ? '굴리는 중...' : '이동 중...'}
                         </button>
+                    ) : game.turnPhase === 'CITY_DECISION' ? (
+                        <div className="w-full flex flex-col gap-2">
+                           <div className="text-xs md:text-sm font-bold text-gray-600 mb-1">건물을 짓기 위해 퀴즈 난이도를 선택하세요!</div>
+                           <div className="flex gap-2 justify-center w-full">
+                              <button 
+                                onClick={() => handleCityQuizSelect('EASY')}
+                                className="flex-1 bg-green-100 hover:bg-green-200 border-2 border-green-500 text-green-800 font-bold py-2 rounded-lg text-[10px] md:text-sm flex flex-col items-center"
+                              >
+                                <span>토지 (하)</span>
+                                <span>{currentTile.price} 구름</span>
+                              </button>
+                              <button 
+                                onClick={() => handleCityQuizSelect('MEDIUM')}
+                                className={`flex-1 border-2 py-2 rounded-lg text-[10px] md:text-sm flex flex-col items-center ${currentPlayer.money >= currentTile.price + Math.floor(currentTile.price * 0.5) ? 'bg-blue-100 hover:bg-blue-200 border-blue-500 text-blue-800' : 'bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed'}`}
+                                disabled={currentPlayer.money < currentTile.price + Math.floor(currentTile.price * 0.5)}
+                              >
+                                <span>주택 (중)</span>
+                                <span>{currentTile.price + Math.floor(currentTile.price * 0.5)} 구름</span>
+                              </button>
+                              <button 
+                                onClick={() => handleCityQuizSelect('HARD')}
+                                className={`flex-1 border-2 py-2 rounded-lg text-[10px] md:text-sm flex flex-col items-center ${currentPlayer.money >= currentTile.price + Math.floor(currentTile.price * 0.5) * 2 ? 'bg-red-100 hover:bg-red-200 border-red-500 text-red-800' : 'bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed'}`}
+                                disabled={currentPlayer.money < currentTile.price + Math.floor(currentTile.price * 0.5) * 2}
+                              >
+                                <span>빌딩 (상)</span>
+                                <span>{currentTile.price + Math.floor(currentTile.price * 0.5) * 2} 구름</span>
+                              </button>
+                           </div>
+                           <button onClick={handlePass} className="mt-1 w-full bg-gray-400 hover:bg-gray-500 text-white font-bold py-1.5 rounded-lg text-xs md:text-base">
+                                포기하기
+                           </button>
+                        </div>
                     ) : game.turnPhase === 'ACTION' ? (
-                        canBuy ? (
-                            <div className="flex gap-2 w-full justify-center">
-                                <button onClick={handleBuyCity} className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-2 md:py-3 rounded-lg shadow-md text-xs md:text-lg">
-                                    구매 ({currentTile.price})
-                                </button>
-                                <button onClick={handlePass} className="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 md:py-3 rounded-lg shadow-md text-xs md:text-lg">
-                                    패스
-                                </button>
-                            </div>
-                        ) : canUpgrade ? (
+                        canUpgrade ? (
                             <div className="flex gap-2 w-full justify-center">
                                 <button onClick={handleUpgradeCity} className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-2 md:py-3 rounded-lg shadow-md text-xs md:text-lg">
                                     증축 ({Math.floor(currentTile.price * 0.5)})

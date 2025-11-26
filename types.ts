@@ -5,7 +5,8 @@ export enum TileType {
   QUIZ = 'QUIZ',
   PARK = 'PARK', // Resting spot
   DONATION = 'DONATION', // Tax/Donation
-  EVENT = 'EVENT' // Random Chance Cards
+  EVENT = 'EVENT', // Random Chance Cards
+  AIRPORT = 'AIRPORT' // Fly to any tile
 }
 
 export interface Tile {
@@ -30,12 +31,14 @@ export interface Player {
   assets: number[]; // Array of Tile IDs owned
 }
 
+export type QuizDifficulty = 'EASY' | 'MEDIUM' | 'HARD';
+
 export interface GameState {
   players: Player[];
   currentPlayerIndex: number;
   tiles: Tile[];
   status: 'SETUP' | 'PLAYING' | 'GAME_OVER';
-  turnPhase: 'ROLL' | 'ROLLING' | 'MOVING' | 'ACTION' | 'END';
+  turnPhase: 'ROLL' | 'ROLLING' | 'MOVING' | 'ACTION' | 'END' | 'CITY_DECISION';
   diceValues: [number, number]; // Changed to support 2 dice
   isDouble: boolean; // Track if the roll was a double
   quizActive: boolean;
@@ -44,6 +47,11 @@ export interface GameState {
   round: number;
   maxRounds?: number;
   isSpaceTravelActive: boolean;
+  // Track what the player is trying to buy when taking a quiz
+  pendingCityPurchase: {
+    level: number; // 0, 1, 2
+    cost: number;
+  } | null;
 }
 
 export interface QuizQuestion {
@@ -51,6 +59,7 @@ export interface QuizQuestion {
   options: string[];
   correctIndex: number;
   explanation: string;
+  difficulty: QuizDifficulty;
 }
 
 export interface GameEvent {
