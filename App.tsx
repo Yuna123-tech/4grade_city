@@ -109,9 +109,6 @@ const App: React.FC = () => {
             ...prev,
             turnPhase: 'ROLL',
             // Double flag stays true to indicate bonus turn, but logic handles reset on next roll
-            // Actually, we just keep isDouble true or reset? 
-            // We need to allow them to roll again.
-            // isDouble is used to show the "Roll Again" button text.
             message: `더블! ${prev.players[prev.currentPlayerIndex].name}의 차례가 계속됩니다.`
         }));
     } else {
@@ -515,6 +512,20 @@ const App: React.FC = () => {
     }
   };
 
+  const handlePass = () => {
+    const player = game.players[game.currentPlayerIndex];
+    const tile = game.tiles[player.position];
+    const canBuy = game.turnPhase === 'ACTION' && tile.type === TileType.CITY && tile.ownerId === null && player.money >= tile.price;
+    const canUpgrade = game.turnPhase === 'ACTION' && tile.type === TileType.CITY && tile.ownerId === player.id && tile.buildingLevel < 2 && player.money >= Math.floor(tile.price * 0.5);
+    
+    if (canBuy) {
+        addLog('구매하지 않고 지나갑니다.');
+    } else if (canUpgrade) {
+        addLog('증축하지 않습니다.');
+    }
+    setGame(prev => ({ ...prev, turnPhase: 'END' }));
+  };
+
   const updateMoney = (playerId: number, amount: number) => {
     setGame(prev => {
         const newPlayers = [...prev.players];
@@ -662,7 +673,6 @@ const App: React.FC = () => {
   const currentTile = game.tiles[currentPlayer.position];
   const canBuy = game.turnPhase === 'ACTION' && currentTile.type === TileType.CITY && currentTile.ownerId === null && currentPlayer.money >= currentTile.price;
   const canUpgrade = game.turnPhase === 'ACTION' && currentTile.type === TileType.CITY && currentTile.ownerId === currentPlayer.id && currentTile.buildingLevel < 2 && currentPlayer.money >= Math.floor(currentTile.price * 0.5);
-  const canPass = game.turnPhase === 'ACTION' || game.turnPhase === 'END';
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col lg:flex-row overflow-hidden max-h-screen">
@@ -706,21 +716,21 @@ const App: React.FC = () => {
             <div className="col-start-2 col-end-6 row-start-2 row-end-6 bg-white/90 backdrop-blur-sm rounded-xl p-2 md:p-6 flex flex-col items-center justify-center shadow-lg border-2 border-white z-10">
                 
                 {/* Header Info */}
-                <div className="text-center mb-2 md:mb-4 w-full">
-                    <h2 className="text-lg md:text-3xl font-jua text-gray-800 mb-1">Round {game.round} / {game.maxRounds}</h2>
-                    <div className="h-1 w-12 md:w-20 bg-blue-400 mx-auto rounded-full"></div>
+                <div className="text-center mb-1 md:mb-4 w-full">
+                    <h2 className="text-base md:text-3xl font-black text-gray-900 mb-1">Round {game.round} / {game.maxRounds}</h2>
+                    <div className="h-1 w-12 md:w-20 bg-blue-500 mx-auto rounded-full"></div>
                 </div>
 
                 {/* Message Log */}
-                <div className="w-full bg-gray-100 rounded-lg p-2 md:p-3 h-16 md:h-24 overflow-y-auto mb-2 md:mb-4 text-center flex items-center justify-center border border-gray-200 shadow-inner">
-                    <p className="font-medium text-xs md:text-base text-gray-700 animate-fade-in whitespace-pre-line leading-tight">{game.message}</p>
+                <div className="w-full bg-blue-50/80 rounded-lg p-2 md:p-4 h-20 md:h-28 overflow-y-auto mb-2 md:mb-4 text-center flex items-center justify-center border-2 border-blue-100 shadow-inner">
+                    <p className="font-bold text-sm md:text-xl text-black animate-fade-in whitespace-pre-line leading-normal">{game.message}</p>
                 </div>
 
                 {/* Current Player Status */}
-                <div className="flex flex-col items-center mb-3 md:mb-6">
-                    <div className="text-xs md:text-sm text-gray-500 mb-1">현재 차례</div>
-                    <div className={`px-4 py-1 md:px-6 md:py-2 rounded-full text-white font-bold text-base md:text-2xl shadow-md flex items-center gap-2 ${currentPlayer.color.replace('bg-', 'bg-')}`}>
-                        <div className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-white"></div>
+                <div className="flex flex-col items-center mb-2 md:mb-6">
+                    <div className="text-[10px] md:text-sm text-gray-800 font-bold mb-1">현재 차례</div>
+                    <div className={`px-4 py-1 md:px-6 md:py-2 rounded-full text-white font-extrabold text-base md:text-2xl shadow-md flex items-center gap-2 ${currentPlayer.color.replace('bg-', 'bg-')}`}>
+                        <div className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-white border border-gray-300"></div>
                         {currentPlayer.name}
                     </div>
                 </div>
@@ -730,7 +740,7 @@ const App: React.FC = () => {
                     {game.turnPhase === 'ROLL' && (
                         <button 
                             onClick={rollDice}
-                            className="bg-gradient-to-br from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold py-2 px-6 md:py-3 md:px-8 rounded-full text-lg md:text-xl shadow-lg transform hover:scale-105 transition-all active:scale-95"
+                            className="bg-gradient-to-br from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-black py-2 px-6 md:py-3 md:px-8 rounded-full text-lg md:text-2xl shadow-lg transform hover:scale-105 transition-all active:scale-95"
                         >
                             🎲 주사위 굴리기
                         </button>
@@ -740,7 +750,7 @@ const App: React.FC = () => {
                     {game.turnPhase !== 'ROLL' && (
                        <div className="flex gap-2 md:gap-3 items-center">
                           {game.diceValues.map((val, idx) => (
-                            <div key={idx} className={`w-10 h-10 md:w-16 md:h-16 bg-white border-4 ${game.isDouble ? 'border-red-500 text-red-500' : 'border-gray-800'} rounded-xl flex items-center justify-center text-2xl md:text-4xl font-bold shadow-md mb-2 transition-transform duration-75`}>
+                            <div key={idx} className={`w-12 h-12 md:w-20 md:h-20 bg-white border-4 ${game.isDouble ? 'border-red-500 text-red-600' : 'border-gray-900 text-black'} rounded-xl flex items-center justify-center text-3xl md:text-5xl font-black shadow-md mb-2 transition-transform duration-75`}>
                                 {val}
                             </div>
                           ))}
@@ -749,20 +759,31 @@ const App: React.FC = () => {
                 </div>
 
                 {/* Action Buttons */}
-                <div className="flex flex-wrap justify-center gap-1 md:gap-2 mt-2 md:mt-4 w-full px-2">
-                    {canBuy && (
-                        <button onClick={handleBuyCity} className="bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-3 md:py-2 md:px-4 rounded-lg shadow animate-pulse text-xs md:text-base">
-                            구매 ({currentTile.price})
-                        </button>
+                <div className="flex flex-wrap justify-center gap-1.5 md:gap-3 mt-2 md:mt-4 w-full px-1">
+                    {/* ACTION PHASE: Decisions (Buy/Upgrade/Pass) */}
+                    {game.turnPhase === 'ACTION' && !game.isSpaceTravelActive && (
+                        <>
+                            {canBuy && (
+                                <button onClick={handleBuyCity} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-3 md:px-6 rounded-lg shadow-md animate-pulse text-sm md:text-lg">
+                                    구매 ({currentTile.price})
+                                </button>
+                            )}
+                            {canUpgrade && (
+                                <button onClick={handleUpgradeCity} className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-3 md:px-6 rounded-lg shadow-md animate-pulse text-sm md:text-lg">
+                                    증축 ({Math.floor(currentTile.price * 0.5)})
+                                </button>
+                            )}
+                            {/* Pass Button: Transitions to END phase */}
+                            <button onClick={handlePass} className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-3 md:px-6 rounded-lg shadow-md text-sm md:text-lg">
+                                {(canBuy || canUpgrade) ? '패스' : '확인'}
+                            </button>
+                        </>
                     )}
-                    {canUpgrade && (
-                        <button onClick={handleUpgradeCity} className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 md:py-2 md:px-4 rounded-lg shadow animate-pulse text-xs md:text-base">
-                            증축 ({Math.floor(currentTile.price * 0.5)})
-                        </button>
-                    )}
-                    {canPass && game.turnPhase !== 'ROLL' && game.turnPhase !== 'MOVING' && game.turnPhase !== 'ROLLING' && !game.isSpaceTravelActive && (
-                        <button onClick={endTurnOrRepeat} className={`bg-gray-500 hover:bg-gray-600 text-white font-bold py-1 px-3 md:py-2 md:px-4 rounded-lg shadow text-xs md:text-base ${game.isDouble ? 'bg-red-500 hover:bg-red-600' : ''}`}>
-                            {game.isDouble ? '🎲 한 번 더!' : '턴 종료'}
+
+                    {/* END PHASE: Progression (Next Turn / Roll Again) */}
+                    {game.turnPhase === 'END' && (
+                        <button onClick={endTurnOrRepeat} className={`text-white font-bold py-2 px-6 md:px-8 rounded-lg shadow-lg text-sm md:text-xl transform hover:scale-105 transition-all ${game.isDouble ? 'bg-orange-500 hover:bg-orange-600 animate-pulse' : 'bg-gray-800 hover:bg-gray-900'}`}>
+                            {game.isDouble ? '🎲 더블! 주사위 한 번 더' : '턴 종료'}
                         </button>
                     )}
                 </div>
@@ -773,20 +794,20 @@ const App: React.FC = () => {
 
       {/* Sidebar: Player Stats (Compact on mobile) */}
       <div className="w-full lg:w-80 bg-white border-t lg:border-t-0 lg:border-l border-gray-200 p-2 md:p-4 shadow-xl overflow-y-auto max-h-[30vh] lg:max-h-full z-20">
-          <h3 className="font-jua text-lg md:text-xl text-gray-700 mb-2 md:mb-4 border-b pb-2 sticky top-0 bg-white z-10">플레이어 현황</h3>
+          <h3 className="font-jua text-lg md:text-2xl text-gray-900 mb-2 md:mb-4 border-b pb-2 sticky top-0 bg-white z-10">플레이어 현황</h3>
           <div className="space-y-2 md:space-y-4">
               {game.players.map((player) => (
-                  <div key={player.id} className={`p-2 md:p-4 rounded-xl border-2 transition-all ${game.currentPlayerIndex === player.id ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' : 'border-gray-100 bg-gray-50'}`}>
+                  <div key={player.id} className={`p-2 md:p-4 rounded-xl border-2 transition-all ${game.currentPlayerIndex === player.id ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' : 'border-gray-200 bg-white'}`}>
                       <div className="flex justify-between items-center mb-1">
                           <div className="flex items-center gap-2">
-                              <div className={`w-3 h-3 md:w-4 md:h-4 rounded-full ${player.color}`}></div>
-                              <span className={`font-bold text-sm md:text-base ${game.currentPlayerIndex === player.id ? 'text-blue-800' : 'text-gray-700'}`}>
+                              <div className={`w-3 h-3 md:w-5 md:h-5 rounded-full ${player.color} border border-black/10`}></div>
+                              <span className={`font-extrabold text-sm md:text-lg ${game.currentPlayerIndex === player.id ? 'text-blue-900' : 'text-gray-900'}`}>
                                   {player.name} {player.isSkipped && '🚫'}
                               </span>
                           </div>
-                          <span className="font-mono font-bold text-gray-900 text-sm md:text-base">{player.money.toLocaleString()} 구름</span>
+                          <span className="font-mono font-black text-black text-sm md:text-lg">{player.money.toLocaleString()} 구름</span>
                       </div>
-                      <div className="text-[10px] md:text-xs text-gray-500 truncate">
+                      <div className="text-[11px] md:text-sm text-gray-800 font-medium truncate pl-6">
                           보유: {player.assets.length > 0 ? player.assets.map(id => BOARD_DATA[id].name).join(', ') : '없음'}
                       </div>
                   </div>
