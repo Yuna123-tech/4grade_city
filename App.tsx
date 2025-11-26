@@ -38,6 +38,7 @@ const App: React.FC = () => {
   // --- State Initialization ---
   const [setupMode, setSetupMode] = useState(true);
   const [playerCount, setPlayerCount] = useState(4);
+  const [targetRounds, setTargetRounds] = useState(15);
   const [setupPlayers, setSetupPlayers] = useState<Array<{name: string, color: string}>>([]);
   
   const [game, setGame] = useState<GameState>({
@@ -188,7 +189,8 @@ const App: React.FC = () => {
       players: newPlayers,
       status: 'PLAYING',
       message: `${newPlayers[0].name}의 차례입니다!`,
-      round: 1
+      round: 1,
+      maxRounds: targetRounds
     });
     setSetupMode(false);
   };
@@ -579,9 +581,9 @@ const App: React.FC = () => {
           <div className="min-h-screen bg-blue-50 flex flex-col items-center justify-center p-4">
               <div className="bg-white p-6 md:p-8 rounded-2xl shadow-xl max-w-2xl w-full text-center border-4 border-blue-200 overflow-y-auto max-h-[90vh]">
                   <h1 className="text-3xl md:text-4xl font-jua text-blue-600 mb-2">🏙️ 우리 고장 도시 탐험대</h1>
-                  <p className="text-gray-500 mb-6">참가 인원과 이름을 정해주세요!</p>
+                  <p className="text-gray-500 mb-6">함께 할 친구들과 목표 라운드를 정해주세요!</p>
                   
-                  <div className="mb-8">
+                  <div className="mb-6">
                       <label className="block text-gray-700 font-bold mb-3 text-lg">참가 인원</label>
                       <div className="flex justify-center gap-4">
                           {[2, 3, 4, 5].map(num => (
@@ -591,6 +593,21 @@ const App: React.FC = () => {
                                   className={`w-12 h-12 rounded-full font-bold text-xl transition-all ${playerCount === num ? 'bg-blue-500 text-white transform scale-110 shadow-lg' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}
                               >
                                   {num}
+                              </button>
+                          ))}
+                      </div>
+                  </div>
+
+                  <div className="mb-6">
+                      <label className="block text-gray-700 font-bold mb-3 text-lg">목표 라운드</label>
+                      <div className="flex justify-center gap-3">
+                          {[10, 15, 20, 30].map(num => (
+                              <button
+                                  key={num}
+                                  onClick={() => setTargetRounds(num)}
+                                  className={`px-3 py-2 md:px-4 md:py-2 rounded-lg font-bold text-base md:text-lg transition-all ${targetRounds === num ? 'bg-blue-500 text-white transform scale-105 shadow-lg' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}
+                              >
+                                  {num}R
                               </button>
                           ))}
                       </div>
