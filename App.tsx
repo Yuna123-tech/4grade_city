@@ -428,8 +428,13 @@ const App: React.FC = () => {
             // Change phase to CITY_DECISION to show purchase options based on quiz difficulty
             setGame(prev => ({ ...prev, turnPhase: 'CITY_DECISION', message: '건물을 짓기 위해 퀴즈에 도전하세요!' }));
         } else if (tile.ownerId === player.id) {
-             addLog(`자신의 도시 ${tile.name}에 왔습니다. 건물을 업그레이드할 수 있습니다.`);
-             // Remains in ACTION phase for Upgrade/Pass
+             if (tile.buildingLevel < 3) {
+                 addLog(`자신의 도시 ${tile.name}에 왔습니다. 건물을 증축하거나 랜드마크를 건설하세요!`);
+             } else {
+                 addLog(`자신의 랜드마크 ${tile.name}에 도착했습니다. 든든하네요!`);
+                 setGame(prev => ({...prev, turnPhase: 'END'})); // Already maxed out
+             }
+             // Remains in ACTION phase for Upgrade/Pass (if level < 3)
         } else {
             // Opponent city
             const rent = calculateRent(tile);
@@ -474,6 +479,10 @@ const App: React.FC = () => {
   };
 
   const calculateRent = (tile: Tile) => {
+    if (tile.buildingLevel === 3) {
+        // Landmark rent is very high!
+        return tile.rent * 5; 
+    }
     return tile.rent + (tile.rent * tile.buildingLevel);
   };
 
@@ -514,9 +523,19 @@ const App: React.FC = () => {
   const handleUpgradeCity = () => {
     const player = game.players[game.currentPlayerIndex];
     const tile = game.tiles[player.position];
-    const upgradeCost = Math.floor(tile.price * 0.5);
+    
+    // Cost calculation
+    let upgradeCost = Math.floor(tile.price * 0.5);
+    let nextLevel = tile.buildingLevel + 1;
+    let upgradeName = "증축";
 
-    if (tile.buildingLevel >= 2) {
+    // Landmark Upgrade (Level 2 -> 3)
+    if (tile.buildingLevel === 2) {
+        upgradeCost = tile.price * 2; // Landmark is expensive
+        upgradeName = "랜드마크 건설";
+    }
+
+    if (tile.buildingLevel >= 3) {
         addLog('더 이상 건물을 높일 수 없습니다.');
         setGame(prev => ({...prev, turnPhase: 'END'}));
         return;
@@ -528,18 +547,18 @@ const App: React.FC = () => {
             newPlayers[player.id].money -= upgradeCost;
             
             const newTiles = [...prev.tiles];
-            newTiles[tile.id] = { ...tile, buildingLevel: tile.buildingLevel + 1 };
+            newTiles[tile.id] = { ...tile, buildingLevel: nextLevel };
             
             return { 
                 ...prev, 
                 players: newPlayers, 
                 tiles: newTiles, 
                 turnPhase: 'END',
-                message: `건물을 증축했습니다! (레벨 ${tile.buildingLevel + 1})` 
+                message: `${upgradeName} 완료! (${nextLevel === 3 ? '랜드마크!' : '레벨 ' + nextLevel})` 
             };
         });
     } else {
-        addLog('돈이 부족하여 증축할 수 없습니다.');
+        addLog('돈이 부족합니다.');
         setGame(prev => ({...prev, turnPhase: 'END'}));
     }
   };
@@ -547,10 +566,10 @@ const App: React.FC = () => {
   const handlePass = () => {
     const player = game.players[game.currentPlayerIndex];
     const tile = game.tiles[player.position];
-    const canUpgrade = game.turnPhase === 'ACTION' && tile.type === TileType.CITY && tile.ownerId === player.id && tile.buildingLevel < 2 && player.money >= Math.floor(tile.price * 0.5);
+    const canUpgrade = game.turnPhase === 'ACTION' && tile.type === TileType.CITY && tile.ownerId === player.id && tile.buildingLevel < 3;
     
     if (canUpgrade) {
-        addLog('증축하지 않습니다.');
+        addLog('건설하지 않습니다.');
     } else if (game.turnPhase === 'CITY_DECISION') {
         addLog('구매를 포기합니다.');
     } else {
@@ -622,7 +641,9 @@ const App: React.FC = () => {
       return game.players.map(p => {
           const assetsValue = p.assets.reduce((sum, tileId) => {
               const tile = game.tiles[tileId];
-              return sum + tile.price + (tile.price * 0.5 * tile.buildingLevel);
+              // Landmark value calculation (bonus value)
+              const levelMultiplier = tile.buildingLevel === 3 ? 5 : tile.buildingLevel * 0.5;
+              return sum + tile.price + (tile.price * levelMultiplier);
           }, 0);
           return { ...p, score: p.money + assetsValue, assetsValue };
       }).sort((a, b) => b.score - a.score);
@@ -759,7 +780,16 @@ const App: React.FC = () => {
 
   const currentPlayer = game.players[game.currentPlayerIndex];
   const currentTile = game.tiles[currentPlayer.position];
-  const canUpgrade = game.turnPhase === 'ACTION' && currentTile.type === TileType.CITY && currentTile.ownerId === currentPlayer.id && currentTile.buildingLevel < 2 && currentPlayer.money >= Math.floor(currentTile.price * 0.5);
+  // canUpgrade condition handles all levels < 3 (including upgrading to Landmark)
+  const canUpgrade = game.turnPhase === 'ACTION' && currentTile.type === TileType.CITY && currentTile.ownerId === currentPlayer.id && currentTile.buildingLevel < 3;
+  
+  // Calculate cost for the "Upgrade" button label
+  let nextUpgradeCost = Math.floor(currentTile.price * 0.5);
+  let nextUpgradeLabel = "증축";
+  if (currentTile.type === TileType.CITY && currentTile.buildingLevel === 2) {
+      nextUpgradeCost = currentTile.price * 2;
+      nextUpgradeLabel = "랜드마크";
+  }
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col lg:flex-row overflow-hidden max-h-screen">
@@ -782,7 +812,7 @@ const App: React.FC = () => {
       {/* Main Game Board Area */}
       <div className="flex-1 p-2 md:p-4 flex items-center justify-center overflow-auto">
          {/* 6x6 Grid Container */}
-         <div className={`grid grid-cols-6 grid-rows-6 gap-[2px] md:gap-1 w-full max-w-[800px] aspect-square bg-blue-200 p-[2px] md:p-4 rounded-xl shadow-inner relative transition-all ${game.isSpaceTravelActive ? 'cursor-pointer ring-4 ring-yellow-400 animate-pulse' : ''}`}>
+         <div className={`grid grid-cols-6 grid-rows-6 gap-[2px] md:gap-1 w-full max-w-[95vmin] md:max-w-[85vh] aspect-square bg-blue-200 p-[2px] md:p-4 rounded-xl shadow-inner relative transition-all ${game.isSpaceTravelActive ? 'cursor-pointer ring-4 ring-yellow-400 animate-pulse' : ''}`}>
             
             {/* Render Tiles */}
             {game.tiles.map((tile, index) => {
@@ -885,8 +915,8 @@ const App: React.FC = () => {
                     ) : game.turnPhase === 'ACTION' ? (
                         canUpgrade ? (
                             <div className="flex gap-2 w-full justify-center">
-                                <button onClick={handleUpgradeCity} className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-2 md:py-3 rounded-lg shadow-md text-xs md:text-lg">
-                                    증축 ({Math.floor(currentTile.price * 0.5)})
+                                <button onClick={handleUpgradeCity} className={`flex-1 ${currentTile.buildingLevel === 2 ? 'bg-purple-500 hover:bg-purple-600' : 'bg-green-500 hover:bg-green-600'} text-white font-bold py-2 md:py-3 rounded-lg shadow-md text-xs md:text-lg`}>
+                                    {nextUpgradeLabel} ({nextUpgradeCost})
                                 </button>
                                 <button onClick={handlePass} className="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 md:py-3 rounded-lg shadow-md text-xs md:text-lg">
                                     패스
@@ -928,13 +958,22 @@ const App: React.FC = () => {
               {/* Asset List - Optimized for mobile wrapping */}
               <div className="text-[10px] md:text-sm text-gray-600 bg-white p-1.5 md:p-2 rounded border border-gray-200 min-h-[1.5rem] break-all whitespace-normal leading-tight">
                 {p.assets.length > 0 ? (
-                    p.assets.map((assetId, i) => (
-                        <span key={assetId}>
-                            {i > 0 && ", "}
-                            {game.tiles[assetId].name}
-                            {game.tiles[assetId].buildingLevel > 0 && <span className="text-yellow-600">({game.tiles[assetId].buildingLevel}단계)</span>}
-                        </span>
-                    ))
+                    p.assets.map((assetId, i) => {
+                        const tile = game.tiles[assetId];
+                        let levelText = "(토지)";
+                        let levelClass = "text-gray-500";
+                        if (tile.buildingLevel === 1) { levelText = "(주택)"; levelClass = "text-blue-600"; }
+                        if (tile.buildingLevel === 2) { levelText = "(빌딩)"; levelClass = "text-green-600"; }
+                        if (tile.buildingLevel === 3) { levelText = "(랜드마크)"; levelClass = "text-purple-600 font-bold"; }
+
+                        return (
+                            <span key={assetId}>
+                                {i > 0 && ", "}
+                                {tile.name}
+                                <span className={`${levelClass} text-[9px] md:text-xs ml-0.5`}>{levelText}</span>
+                            </span>
+                        );
+                    })
                 ) : (
                     <span className="text-gray-400 italic">보유 도시 없음</span>
                 )}
